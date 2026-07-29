@@ -1,0 +1,60 @@
+# Sync bucket/sparkey.json from the public release mirror.
+#
+# The Sparkey source repo is private and org policy disables deploy keys, so
+# the release pipeline cannot push here. Instead this bucket pulls: the mirror's
+# latest.json (written by the release pipeline) is the source of truth for the
+# current version and the windows-x64 SHA256.
+name: Sync manifest
+on:
+  schedule:
+    - cron: "23 */6 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update manifest if a new version is on the mirror
+        run: |
+          set -euo pipefail
+          curl -fsSL https://install.sparkey.ai/latest.json -o /tmp/latest.json
+          VERSION=$(jq -r '.latest_version' /tmp/latest.json)
+          SHA=$(jq -r '.assets["sparkey-windows-x64.exe"].sha256 // empty' /tmp/latest.json)
+          if [ -z "$VERSION" ] || [ -z "$SHA" ]; then
+            echo "mirror latest.json missing version or windows sha — skipping"; exit 0
+          fi
+          CURRENT=$(jq -r '.version // empty' bucket/sparkey.json 2>/dev/null || true)
+          if [ "$VERSION" = "$CURRENT" ]; then
+            echo "bucket already at $VERSION"; exit 0
+          fi
+          jq -n --arg version "$VERSION" --arg sha "$SHA" '{
+            version: $version,
+            description: "Capture coding-agent sessions from Claude Code, Cursor, Codex, and more.",
+            homepage: "https://sparkey.ai",
+            license: "MIT",
+            architecture: {
+              "64bit": {
+                url: ("https://install.sparkey.ai/v" + $version + "/sparkey-windows-x64.exe#/sparkey.exe"),
+                hash: $sha
+              }
+            },
+            bin: "sparkey.exe",
+            checkver: {
+              url: "https://install.sparkey.ai/latest.json",
+              jsonpath: "$.latest_version"
+            },
+            autoupdate: {
+              architecture: {
+                "64bit": {
+                  url: "https://install.sparkey.ai/v$version/sparkey-windows-x64.exe#/sparkey.exe"
+                }
+              }
+            }
+          }' > bucket/sparkey.json
+          git config user.name "sparkey-release"
+          git config user.email "release@sparkey.ai"
+          git add bucket/sparkey.json
+          git commit -m "sparkey v$VERSION"
+          git push
