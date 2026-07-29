@@ -33,7 +33,7 @@ jobs:
             version: $version,
             description: "Capture coding-agent sessions from Claude Code, Cursor, Codex, and more.",
             homepage: "https://sparkey.ai",
-            license: "MIT",
+            license: "Proprietary",
             architecture: {
               "64bit": {
                 url: ("https://install.sparkey.ai/v" + $version + "/sparkey-windows-x64.exe#/sparkey.exe"),
