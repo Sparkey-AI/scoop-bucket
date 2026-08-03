@@ -22,7 +22,7 @@ jobs:
           HASH=$(jq -r '.architecture["64bit"].hash' "$M")
           URL=$(jq -r '.architecture["64bit"].url' "$M")
 
-          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "bad version: $VERSION"; exit 1; }
+          echo "$VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+([-+][0-9A-Za-z.-]+)?$' || { echo "bad version: $VERSION"; exit 1; }
           echo "$HASH" | grep -Eq '^[0-9a-f]{64}$' || { echo "bad sha256: $HASH"; exit 1; }
           case "$URL" in
             "https://install.sparkey.ai/v$VERSION/sparkey-windows-x64.exe#/sparkey.exe") ;;
@@ -34,5 +34,5 @@ jobs:
           MIRROR_VERSION=$(jq -r '.latest_version' /tmp/latest.json)
           MIRROR_SHA=$(jq -r '.assets["sparkey-windows-x64.exe"].sha256 // empty' /tmp/latest.json)
           [ "$VERSION" = "$MIRROR_VERSION" ] || { echo "version $VERSION != mirror $MIRROR_VERSION"; exit 1; }
-          [ "$HASH" = "$MIRROR_SHA" ] || { echo "sha256 does not match mirror"; exit 1; }
+          [ "$HASH" = "$MIRROR_SHA" ] || { echo "sha256 mismatch: manifest=$HASH mirror=${MIRROR_SHA:-<missing>}"; exit 1; }
           echo "manifest OK: sparkey v$VERSION"
