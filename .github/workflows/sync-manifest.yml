@@ -4,19 +4,28 @@
 # the release pipeline cannot push here. Instead this bucket pulls: the mirror's
 # latest.json (written by the release pipeline) is the source of truth for the
 # current version and the windows-x64 SHA256.
+#
+# main is protected (PRs mandatory), so the sync opens a pull request instead
+# of pushing directly. BUCKET_SYNC_TOKEN is a fine-grained PAT scoped to this
+# repository only (contents + pull-requests write); using a PAT rather than
+# GITHUB_TOKEN also lets the validation workflow run on the sync PRs.
 name: Sync manifest
 on:
   schedule:
     - cron: "23 */6 * * *"
   workflow_dispatch:
 permissions:
-  contents: write
+  contents: read
 jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Update manifest if a new version is on the mirror
+        with:
+          token: ${{ secrets.BUCKET_SYNC_TOKEN }}
+      - name: Open a PR if a new version is on the mirror
+        env:
+          GH_TOKEN: ${{ secrets.BUCKET_SYNC_TOKEN }}
         run: |
           set -euo pipefail
           curl -fsSL https://install.sparkey.ai/latest.json -o /tmp/latest.json
@@ -28,6 +37,10 @@ jobs:
           CURRENT=$(jq -r '.version // empty' bucket/sparkey.json 2>/dev/null || true)
           if [ "$VERSION" = "$CURRENT" ]; then
             echo "bucket already at $VERSION"; exit 0
+          fi
+          BRANCH="manifest/v$VERSION"
+          if git ls-remote --exit-code origin "refs/heads/$BRANCH" >/dev/null 2>&1; then
+            echo "sync branch $BRANCH already exists — PR pending"; exit 0
           fi
           jq -n --arg version "$VERSION" --arg sha "$SHA" '{
             version: $version,
@@ -55,6 +68,11 @@ jobs:
           }' > bucket/sparkey.json
           git config user.name "sparkey-release"
           git config user.email "release@sparkey.ai"
+          git checkout -b "$BRANCH"
           git add bucket/sparkey.json
           git commit -m "sparkey v$VERSION"
-          git push
+          git push origin "$BRANCH"
+          gh pr create \
+            --title "sparkey v$VERSION" \
+            --body "Automated manifest sync from the release mirror (install.sparkey.ai). Version and SHA256 are taken from the mirror's latest.json; the validate workflow cross-checks both." \
+            --base main --head "$BRANCH"
