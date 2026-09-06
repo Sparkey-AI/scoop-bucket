@@ -20,14 +20,23 @@ jobs:
   sync:
     runs-on: ubuntu-latest
     steps:
+      # Public repo: the default token reads fine. The PAT is applied only at
+      # push/PR time (below) after whitespace is stripped — feeding it to
+      # checkout raw breaks git auth when the pasted secret has a newline.
       - uses: actions/checkout@v4
         with:
-          token: ${{ secrets.BUCKET_SYNC_TOKEN }}
+          persist-credentials: false
       - name: Open a PR if a new version is on the mirror
         env:
           GH_TOKEN: ${{ secrets.BUCKET_SYNC_TOKEN }}
         run: |
           set -euo pipefail
+          GH_TOKEN="$(printf '%s' "${GH_TOKEN:-}" | tr -d '[:space:]')"
+          export GH_TOKEN
+          if [ -z "${GH_TOKEN:-}" ]; then
+            echo "::error::BUCKET_SYNC_TOKEN is not set. Mint a fine-grained PAT scoped to this repo (Contents + Pull requests: read/write) and add it as a repository secret named BUCKET_SYNC_TOKEN."
+            exit 1
+          fi
           curl -fsSL https://install.sparkey.ai/latest.json -o /tmp/latest.json
           VERSION=$(jq -r '.latest_version' /tmp/latest.json)
           SHA=$(jq -r '.assets["sparkey-windows-x64.exe"].sha256 // empty' /tmp/latest.json)
@@ -39,7 +48,8 @@ jobs:
             echo "bucket already at $VERSION"; exit 0
           fi
           BRANCH="manifest/v$VERSION"
-          if git ls-remote --exit-code origin "refs/heads/$BRANCH" >/dev/null 2>&1; then
+          PUSH_URL="https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git ls-remote --exit-code "$PUSH_URL" "refs/heads/$BRANCH" >/dev/null 2>&1; then
             echo "sync branch $BRANCH already exists — PR pending"; exit 0
           fi
           jq -n --arg version "$VERSION" --arg sha "$SHA" '{
@@ -71,8 +81,8 @@ jobs:
           git checkout -b "$BRANCH"
           git add bucket/sparkey.json
           git commit -m "sparkey v$VERSION"
-          git push origin "$BRANCH"
-          gh pr create \
+          git push "$PUSH_URL" "$BRANCH"
+          gh pr create --repo "$GITHUB_REPOSITORY" \
             --title "sparkey v$VERSION" \
             --body "Automated manifest sync from the release mirror (install.sparkey.ai). Version and SHA256 are taken from the mirror's latest.json; the validate workflow cross-checks both." \
             --base main --head "$BRANCH"
