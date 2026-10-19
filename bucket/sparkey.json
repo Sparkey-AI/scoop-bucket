@@ -1,12 +1,12 @@
 {
-  "version": "0.5.29",
+  "version": "0.6.2",
   "description": "Capture coding-agent sessions from Claude Code, Cursor, Codex, and more.",
   "homepage": "https://sparkey.ai",
   "license": "Proprietary",
   "architecture": {
     "64bit": {
-      "url": "https://install.sparkey.ai/v0.5.29/sparkey-windows-x64.exe#/sparkey.exe",
-      "hash": "0459660bb918fd1a3b8eb52542b272c13eebc61a0c4fb03fa80c98848ebcab6f"
+      "url": "https://install.sparkey.ai/v0.6.2/sparkey-windows-x64.exe#/sparkey.exe",
+      "hash": "962404d45f037f9185370ffed5dd26fbe5c35044402559b0d87f4a0e2303c7f5"
     }
   },
   "bin": "sparkey.exe",
